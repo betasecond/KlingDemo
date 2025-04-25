@@ -388,3 +388,218 @@
 
 @apiUse KlingErrorResponse
 ```
+
+
+---
+```apidoc
+# Kling AI API - 图像生成 (Image Generation)
+
+## 概述
+
+本部分 API 提供基于文本提示 (文生图) 或结合参考图像 (图生图) 生成高质量静态图像的能力。
+
+## 模型与能力概览
+
+**不同模型版本支持的图像生成能力和宽高比有所不同，请参考下表或官方最新能力地图选择合适的参数。**
+
+| 功能        | 模型        | 1:1 | 16:9 | 4:3 | 3:2 | 2:3 | 3:4 | 9:16 | 21:9 |
+| :---------- | :---------- | :-: | :--: | :-: | :-: | :-: | :-: | :--: | :--: |
+| **文生图**  | kling-v1    | ✅  | ✅   | ✅  | ✅  | ✅  | ✅  | ✅   | -    |
+|             | kling-v1-5  | ✅  | ✅   | ✅  | ✅  | ✅  | ✅  | ✅   | ✅   |
+|             | kling-v2    | ✅  | ✅   | ✅  | ✅  | ✅  | ✅  | ✅   | ✅   |
+| **图生图**  |             |     |      |     |     |     |     |      |      |
+|             | kling-v1    | ✅  | ✅   | ✅  | ✅  | ✅  | ✅  | ✅   | -    |
+|             |  *(通用垫图)* |     |      |     |     |     |     |      |      |
+|             | kling-v1-5  | ✅  | ✅   | ✅  | ✅  | ✅  | ✅  | ✅   | ✅   |
+|             |  *(角色特征)*|     |      |     |     |     |     |      |      |
+|             | kling-v1-5  | ✅  | ✅   | ✅  | ✅  | ✅  | ✅  | ✅   | ✅   |
+|             |  *(人物长相)*|     |      |     |     |     |     |      |      |
+|             | kling-v2    | -   | -    | -   | -   | -   | -   | -    | -    |
+|             |  *(全部能力)*|     |      |     |     |     |     |      |      |
+
+```
+---
+
+## 3. 创建图像生成任务
+```apidoc
+@api {post} /v1/images/generations 创建图像生成任务
+@apiVersion 1.0.0
+@apiName CreateImageGenerationTask
+@apiGroup ImageGeneration
+@apiDescription 提交一个基于文本提示（文生图）或结合参考图（图生图）生成图像的任务。
+
+@apiUse KlingAuth
+
+@apiBody {String} [model_name="kling-v1"] 模型名称。 <br/> 枚举值: `kling-v1`, `kling-v1-5`, `kling-v2`。 <br/> *注意：为了保持命名统一，原 `model` 字段变更为 `model_name` 字段。继续使用 `model` 字段等价于 `model_name` 为空时的默认行为 (即调用 `kling-v1` 模型)。*
+@apiBody {String} prompt **必须。** 正向文本提示词。描述期望生成的图像内容。不能超过 500 个字符。
+@apiBody {String} [negative_prompt] 负向文本提示词。描述不希望出现在图像中的内容。不能超过 200 个字符。**注意：在图生图场景下（即提供了 `image` 参数时），不支持此参数。**
+@apiBody {String} [image] 参考图像 (用于图生图)。支持传入图片 Base64 编码或图片 URL（需确保可公开访问）。
+    <ul>
+        <li>格式: `.jpg`, `.jpeg`, `.png`。</li>
+        <li>大小: 不超过 10MB。</li>
+        <li>分辨率: 不小于 300x300px。</li>
+        <li>宽高比: 在 1:2.5 到 2.5:1 之间。</li>
+        <li>**重要提示 (Base64):** 若使用 Base64，请确保**不要**包含任何前缀 (如 `data:image/png;base64,`)，直接提供编码后的字符串。</li>
+    </ul>
+@apiBody {String} [image_reference] 图片参考类型。指定参考图 `image` 的用途。
+    <ul>
+        <li>枚举值: `subject` (角色特征参考), `face` (人物长相参考)。</li>
+        <li>**条件必填:** 使用 `kling-v1-5` 模型且提供了 `image` 参数时，此参数**必须**填写。</li>
+        <li>**模型限制:** 仅 `kling-v1-5` 支持此参数。</li>
+        <li>**使用提示:** 使用 `face` 时，上传的 `image` 图片中应仅包含 1 张清晰的人脸。</li>
+    </ul>
+@apiBody {Float} [image_fidelity=0.5] 图片参考强度。控制生成图像对参考图 `image` 的遵循程度。取值范围：[0, 1]，数值越大参考强度越大。
+@apiBody {Float} [human_fidelity=0.45] 面部参考强度。控制生成图像对参考图 `image` 中人物五官的相似度。
+    <ul>
+        <li>**生效条件:** 仅当 `image_reference` 参数为 `face` 时生效。</li>
+        <li>取值范围：[0, 1]，数值越大参考强度越大。</li>
+    </ul>
+@apiBody {Integer} [n=1] 生成图片数量。取值范围：[1, 9]。
+@apiBody {String} [aspect_ratio="16:9"] 生成图片的画面纵横比 (宽:高)。
+    <ul>
+        <li>枚举值: `16:9`, `9:16`, `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `21:9`。</li>
+        <li>**模型限制:** 不同模型版本支持的范围不同，详见能力地图。</li>
+    </ul>
+@apiBody {String} [callback_url] 任务结果回调通知地址。如果配置，服务端会在任务状态变更时主动向此 URL 发送 POST 请求通知。具体通知消息 Schema 见官方“Callback 协议”文档。
+
+@apiExample {curl} 请求示例 (文生图):
+ curl --location --request POST 'https://api.klingai.com/v1/images/generations' \
+ --header 'Authorization: Bearer YOUR_API_KEY' \
+ --header 'Content-Type: application/json' \
+ --data-raw '{
+     "model_name": "kling-v1-5",
+     "prompt": "一只可爱的猫咪在草地上玩耍，阳光明媚",
+     "negative_prompt": "模糊, 低质量, 多余肢体",
+     "n": 2,
+     "aspect_ratio": "1:1"
+ }'
+
+@apiExample {curl} 请求示例 (图生图 - 人物长相参考):
+ curl --location --request POST 'https://api.klingai.com/v1/images/generations' \
+ --header 'Authorization: Bearer YOUR_API_KEY' \
+ --header 'Content-Type: application/json' \
+ --data-raw '{
+     "model_name": "kling-v1-5",
+     "prompt": "一个宇航员站在月球表面，望向远方的地球",
+     "image": "https://example.com/path/to/face_image.jpg",
+     "image_reference": "face",
+     "image_fidelity": 0.6,
+     "human_fidelity": 0.7,
+     "n": 1,
+     "aspect_ratio": "16:9"
+ }'
+
+
+@apiSuccessExample {json} 成功响应 (任务已提交):
+ HTTP/1.1 200 OK
+ {
+   "code": 0,
+   "message": "Success",
+   "request_id": "req_stu678vwx901",
+   "data": {
+     "task_id": "task_pqr123abc456",
+     "task_status": "submitted",
+     "created_at": 1722769557708,
+     "updated_at": 1722769557708
+   }
+ }
+
+@apiUse KlingErrorResponse
+
+```
+
+---
+
+## 4. 查询单个图像生成任务
+
+```apidoc
+@api {get} /v1/images/generations/:id 查询单个图像生成任务
+@apiVersion 1.0.0
+@apiName GetImageGenerationTask
+@apiGroup ImageGeneration
+@apiDescription 根据任务 ID 查询指定图像生成任务的状态和结果。
+
+@apiUse KlingAuth
+
+@apiParam {String} id **必须。** 图像生成的任务 ID (Path Parameter)。在 URL 路径中填入要查询的任务 `task_id`。
+
+@apiExample {curl} 请求示例:
+ curl --location --request GET 'https://api.klingai.com/v1/images/generations/task_pqr123abc456' \
+ --header 'Authorization: Bearer YOUR_API_KEY' \
+ --header 'Content-Type: application/json'
+
+@apiSuccessExample {json} 成功响应 (任务成功):
+ HTTP/1.1 200 OK
+ {
+   "code": 0,
+   "message": "Success",
+   "request_id": "req_yza234bcd567",
+   "data":{
+     "task_id": "task_pqr123abc456",
+     "task_status": "succeed",
+     "task_status_msg": "Task completed successfully",
+     "created_at": 1722769557708,
+     "updated_at": 1722769598123,
+     "task_result":{
+       "images":[
+         {
+           "index": 0,
+           "url": "https://h1.inkwai.com/bs2/upload-ylab-stunt/1fa0ac67d8ce6cd55b50d68b967b3a59.png"
+         },
+         {
+           "index": 1,
+           "url": "https://h1.inkwai.com/bs2/upload-ylab-stunt/abcdef1234567890abcdef1234567890.png"
+         }
+       ]
+     }
+   }
+ }
+
+@apiSuccessExample {json} 成功响应 (任务处理中):
+ HTTP/1.1 200 OK
+ {
+   "code": 0,
+   "message": "Success",
+   "request_id": "req_efg890hij123",
+   "data":{
+     "task_id": "task_pqr123abc456",
+     "task_status": "processing",
+     "task_status_msg": null,
+     "created_at": 1722769557708,
+     "updated_at": 1722769570456,
+     "task_result": null
+   }
+ }
+
+@apiSuccessExample {json} 成功响应 (任务失败):
+ HTTP/1.1 200 OK
+ {
+   "code": 0,
+   "message": "Success",
+   "request_id": "req_klm456nop789",
+   "data":{
+     "task_id": "task_stu789def012",
+     "task_status": "failed",
+     "task_status_msg": "Input prompt triggered content safety policy.", // 失败原因示例
+     "created_at": 1722769801234,
+     "updated_at": 1722769825678,
+     "task_result": null
+   }
+ }
+
+@apiSuccess {Object} data 任务详情数据。
+@apiSuccess {String} data.task_id 任务 ID (系统生成)。
+@apiUse KlingTaskStatus
+@apiSuccess {String} [data.task_status_msg] 任务状态信息。当任务失败时，通常会展示失败原因 (如触发平台内容风控等)。
+@apiSuccess {Number} data.created_at 任务创建时间 (Unix 时间戳，单位 ms)。
+@apiSuccess {Number} data.updated_at 任务最后更新时间 (Unix 时间戳，单位 ms)。
+@apiSuccess {Object} [data.task_result] 任务结果。仅当 `task_status` 为 `succeed` 时存在。
+@apiSuccess {Object[]} data.task_result.images 生成的图像列表。
+@apiSuccess {Integer} data.task_result.images.index 图片编号，从 0 开始，对应请求参数 `n` 生成的数量。
+@apiSuccess {String} data.task_result.images.url 生成图像的 URL 地址。**请注意：为保障信息安全，生成的图片/视频会在 30 天后被清理，请及时转存。**
+
+@apiUse KlingErrorResponse
+
+@apiError (Error 4xx/5xx) TaskNotFound 如果提供的 `task_id` 不存在，可能会返回 404 或其他错误码。
+
+```
