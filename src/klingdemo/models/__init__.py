@@ -15,7 +15,17 @@ from .image2video import (
     VideoResult
 )
 
+from .image_generation import (
+    ImageGenerationRequest,
+    ImageGenerationResponse,
+    ImageGenerationTaskResponseData,
+    ImageGenerationTaskResult,
+    ImageReference,
+    ImageResult
+)
+
 __all__ = [
+    # Image-to-Video models
     "CameraControl", 
     "CameraControlConfig",
     "DynamicMask", 
@@ -26,5 +36,13 @@ __all__ = [
     "TaskResult", 
     "TaskStatus", 
     "TrajectoryPoint", 
-    "VideoResult"
+    "VideoResult",
+    
+    # Image Generation models
+    "ImageGenerationRequest",
+    "ImageGenerationResponse",
+    "ImageGenerationTaskResponseData",
+    "ImageGenerationTaskResult",
+    "ImageReference",
+    "ImageResult"
 ]

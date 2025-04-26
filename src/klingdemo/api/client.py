@@ -1,8 +1,8 @@
 """
-Kling AI API Client for image-to-video generation.
+Kling AI API Client for image-to-video generation and image generation.
 
 This module provides a client for interacting with Kling AI's API,
-with a focus on the image-to-video generation functionality.
+with support for image-to-video generation and image generation functionality.
 """
 import json
 import time
@@ -23,6 +23,11 @@ from ..models.image2video import (
     ImageToVideoResponse,
     TaskResponseData,
     TaskStatus,
+)
+from ..models.image_generation import (
+    ImageGenerationRequest,
+    ImageGenerationResponse,
+    ImageGenerationTaskResponseData,
 )
 from ..utils.config import generate_jwt_token
 
@@ -47,6 +52,40 @@ class NetworkError(Exception):
     """Exception raised for network-related errors when calling the API."""
 
     pass
+
+
+class ResourceExhaustionError(KlingAPIError):
+    """Exception raised when API resources or quota is exhausted."""
+    
+    def __init__(
+        self,
+        message: str = "Resource pack exhausted",
+        status_code: Optional[int] = None,
+        error_code: Optional[int] = None,
+        request_id: Optional[str] = None,
+        raw_response: Optional[Dict] = None,
+    ):
+        self.raw_response = raw_response
+        super().__init__(
+            message=message,
+            status_code=status_code,
+            error_code=error_code,
+            request_id=request_id
+        )
+        
+    def __str__(self):
+        base_str = super().__str__()
+        details = []
+        if self.status_code:
+            details.append(f"Status: {self.status_code}")
+        if self.error_code:
+            details.append(f"Error Code: {self.error_code}")
+        if self.request_id:
+            details.append(f"Request ID: {self.request_id}")
+        
+        if details:
+            return f"{base_str} ({', '.join(details)})"
+        return base_str
 
 
 class KlingAPIClient:
@@ -133,6 +172,7 @@ class KlingAPIClient:
         Raises:
             KlingAPIError: If the API returns an error response
             NetworkError: If there's an issue with the response format
+            ResourceExhaustionError: If the API indicates resource exhaustion
         """
         try:
             # Check for HTTP errors
@@ -143,8 +183,20 @@ class KlingAPIClient:
 
             # Check for API-level errors
             if data.get("code", 0) != 0:
+                message = data.get("message", "Unknown API error")
+                
+                # Check if this is a resource exhaustion error
+                if "resource pack exhausted" in message.lower():
+                    raise ResourceExhaustionError(
+                        message=message,
+                        status_code=response.status_code,
+                        error_code=data.get("code"),
+                        request_id=data.get("request_id"),
+                        raw_response=data
+                    )
+                
                 raise KlingAPIError(
-                    message=data.get("message", "Unknown API error"),
+                    message=message,
                     status_code=response.status_code,
                     error_code=data.get("code"),
                     request_id=data.get("request_id"),
@@ -157,8 +209,20 @@ class KlingAPIClient:
             # Try to parse error response if possible
             try:
                 error_data = response.json()
+                message = error_data.get("message", str(err))
+                
+                # Check if this is a resource exhaustion error
+                if "resource pack exhausted" in message.lower():
+                    raise ResourceExhaustionError(
+                        message=message,
+                        status_code=response.status_code,
+                        error_code=error_data.get("code"),
+                        request_id=error_data.get("request_id"),
+                        raw_response=error_data
+                    )
+                
                 raise KlingAPIError(
-                    message=error_data.get("message", str(err)),
+                    message=message,
                     status_code=response.status_code,
                     error_code=error_data.get("code"),
                     request_id=error_data.get("request_id"),
@@ -406,6 +470,118 @@ class KlingAPIClient:
                 
             elif task.task_status == TaskStatus.FAILED:
                 error_msg = f"Task {task_id} failed: {task.task_status_msg or 'Unknown error'}"
+                logger.error(error_msg)
+                raise KlingAPIError(error_msg)
+                
+            # Task is still processing, wait before checking again
+            logger.debug(f"Task {task_id} is still {task.task_status}, waiting {check_interval}s...")
+            time.sleep(check_interval)
+
+    def create_image_generation_task(
+        self, request: Union[Dict, ImageGenerationRequest]
+    ) -> ImageGenerationTaskResponseData:
+        """
+        Create an image generation task (text-to-image or image-to-image).
+
+        Args:
+            request: Image generation request parameters, either as a dictionary
+                    or an ImageGenerationRequest object
+
+        Returns:
+            ImageGenerationTaskResponseData object containing the task information
+
+        Raises:
+            ValueError: If validation of the request data fails
+            KlingAPIError: If the API returns an error response
+            NetworkError: If there's a network-related error
+        """
+        # Convert to request model if dictionary is provided
+        if isinstance(request, dict):
+            try:
+                request = ImageGenerationRequest(**request)
+            except ValidationError as e:
+                raise ValueError(f"Invalid request data: {e}")
+
+        # Convert to dictionary for requests library
+        request_dict = request.model_dump(exclude_none=True)
+
+        # Make the API request
+        try:
+            response = self._request("POST", "/v1/images/generations", json_data=request_dict)
+            response_model = ImageGenerationResponse(**response)
+
+            # Handle the response data which should contain a task object
+            if isinstance(response_model.data, dict):
+                return ImageGenerationTaskResponseData(**response_model.data)
+            else:
+                raise ValueError("Unexpected response format")
+        except ValidationError as e:
+            logger.error(f"Error parsing API response: {e}")
+            raise ValueError(f"Unexpected response format: {e}")
+
+    def get_image_generation_task(self, task_id: str) -> ImageGenerationTaskResponseData:
+        """
+        Get information about an image generation task by its task_id.
+
+        Args:
+            task_id: The task ID to retrieve
+
+        Returns:
+            ImageGenerationTaskResponseData object containing the task information
+
+        Raises:
+            KlingAPIError: If the API returns an error response
+            NetworkError: If there's a network-related error
+            ValueError: If the response doesn't match expected format
+        """
+        try:
+            response = self._request("GET", f"/v1/images/generations/{task_id}")
+            response_model = ImageGenerationResponse(**response)
+
+            # Handle the response data
+            if isinstance(response_model.data, dict):
+                return ImageGenerationTaskResponseData(**response_model.data)
+            else:
+                raise ValueError("Unexpected response format")
+        except ValidationError as e:
+            logger.error(f"Error parsing API response: {e}")
+            raise ValueError(f"Unexpected response format: {e}")
+    
+    def wait_for_image_generation_completion(
+        self, task_id: str, check_interval: int = 5, timeout: int = 300
+    ) -> ImageGenerationTaskResponseData:
+        """
+        Wait for an image generation task to complete.
+
+        Args:
+            task_id: The task ID to wait for
+            check_interval: How frequently to check task status (in seconds)
+            timeout: Maximum time to wait (in seconds)
+
+        Returns:
+            ImageGenerationTaskResponseData object containing the completed task information
+
+        Raises:
+            TimeoutError: If the timeout is reached before the task completes
+            KlingAPIError: If the API returns an error response
+            NetworkError: If there's a network-related error
+        """
+        start_time = time.time()
+        while True:
+            # Check if timeout has been reached
+            if time.time() - start_time > timeout:
+                raise TimeoutError(f"Task {task_id} did not complete within {timeout} seconds")
+
+            # Get the task status
+            task = self.get_image_generation_task(task_id)
+            
+            # Check if the task is complete
+            if task.task_status == TaskStatus.SUCCEED:
+                logger.info(f"Image generation task {task_id} completed successfully")
+                return task
+                
+            elif task.task_status == TaskStatus.FAILED:
+                error_msg = f"Image generation task {task_id} failed: {task.task_status_msg or 'Unknown error'}"
                 logger.error(error_msg)
                 raise KlingAPIError(error_msg)
                 
