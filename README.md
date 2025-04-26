@@ -1,10 +1,10 @@
 # KlingDemo
 
-A Python client library and demo application for Kling AI's Image-to-Video API. This project provides a well-structured, strongly-typed interface to the Kling AI API, using best practices for error handling, data validation, and configuration management.
+A Python client library and demo application for Kling AI's Image-to-Video and Image Generation APIs. This project provides a well-structured, strongly-typed interface to the Kling AI APIs, using best practices for error handling, data validation, and configuration management.
 
 ## Features
 
-- **Full API Coverage**: Implements all capabilities of the Kling AI Image-to-Video API
+- **Full API Coverage**: Implements all capabilities of the Kling AI Image-to-Video and Image Generation APIs
 - **JWT Authentication**: Uses JWT-based authentication as specified in the Kling AI API documentation
 - **Type Safety**: Uses Pydantic for input validation and type checking
 - **Robust Error Handling**: Comprehensive error handling with descriptive error messages
@@ -64,6 +64,8 @@ The Kling API uses JWT (JSON Web Token) for authentication. The client automatic
 
 ## Basic Usage
 
+### Image-to-Video Generation
+
 ```python
 from klingdemo.api import KlingAPIClient
 from klingdemo.models import ImageToVideoRequest
@@ -103,11 +105,72 @@ if completed_task.task_result:
         print(f"Generated video: {video.url}")
 ```
 
+### Image Generation (Text-to-Image and Image-to-Image)
+
+```python
+from klingdemo.api import KlingAPIClient
+from klingdemo.models import ImageGenerationRequest, ImageReference
+from klingdemo.utils import load_config, setup_logging
+from pathlib import Path
+
+# Set up logging
+setup_logging()
+
+# Load configuration
+config = load_config()
+
+# Create client with JWT authentication
+client = KlingAPIClient(
+    access_key=config["access_key"],
+    secret_key=config["secret_key"]
+)
+
+# Example 1: Text-to-Image
+text_to_img_request = ImageGenerationRequest(
+    model_name="kling-v1-5",
+    prompt="A beautiful mountain landscape with a lake",
+    negative_prompt="blurry, low quality",
+    n=1,
+    aspect_ratio="16:9"
+)
+
+# Submit the task
+task = client.create_image_generation_task(text_to_img_request)
+print(f"Task created with ID: {task.task_id}")
+
+# Wait for task to complete
+completed_task = client.wait_for_image_generation_completion(task.task_id)
+
+# Process the result
+if completed_task.task_result:
+    for image in completed_task.task_result.images:
+        print(f"Generated image: {image.url}")
+
+# Example 2: Image-to-Image (with a reference image)
+from klingdemo.examples.image_gen_demo import encode_image_to_base64
+
+# Load and encode a local image
+image_path = "path/to/reference_image.jpg"
+encoded_image = encode_image_to_base64(image_path)
+
+img_to_img_request = ImageGenerationRequest(
+    model_name="kling-v1-5",
+    prompt="A person in a sci-fi environment",
+    image=encoded_image,
+    image_reference=ImageReference.SUBJECT,  # Use the image as a subject reference
+    image_fidelity=0.6,  # Higher adherence to reference image
+    n=1,
+    aspect_ratio="16:9"
+)
+
+# Submit and process as before
+```
+
 ## Demo Scripts
 
 The project includes example scripts that demonstrate how to use the library:
 
-### Basic Demo
+### Basic Image-to-Video Demo
 
 This script demonstrates the basic functionality of creating an image-to-video task:
 
@@ -120,7 +183,7 @@ python -m src.klingdemo.examples.basic_demo \
     --duration 5
 ```
 
-### Advanced Demo
+### Advanced Image-to-Video Demo
 
 This script demonstrates advanced features like dynamic masks, static masks, camera control, and image tails:
 
@@ -143,17 +206,58 @@ python -m src.klingdemo.examples.advanced_demo \
     --prompt "Zooming into a landscape"
 ```
 
-Run `python -m src.klingdemo.examples.basic_demo --help` or `python -m src.klingdemo.examples.advanced_demo --help` for full usage instructions.
+### Image Generation Demo
+
+This script demonstrates how to use the image generation capabilities (both text-to-image and image-to-image):
+
+```bash
+# Text-to-Image example
+python -m src.klingdemo.examples.image_gen_demo \
+    --prompt "A beautiful sunset over mountains" \
+    --model kling-v1-5 \
+    --aspect-ratio 16:9 \
+    --n 2
+
+# Image-to-Image example with subject reference
+python -m src.klingdemo.examples.image_gen_demo \
+    --prompt "A cyberpunk version of the person" \
+    --model kling-v1-5 \
+    --image path/to/reference_image.jpg \
+    --image-reference subject \
+    --image-fidelity 0.7
+
+# Image-to-Image example with face reference
+python -m src.klingdemo.examples.image_gen_demo \
+    --prompt "A portrait of the person as a medieval knight" \
+    --model kling-v1-5 \
+    --image path/to/face_image.jpg \
+    --image-reference face \
+    --image-fidelity 0.6 \
+    --human-fidelity 0.8
+```
+
+Run `python -m src.klingdemo.examples.image_gen_demo --help` for full usage instructions.
 
 ## API Features
 
-The KlingDemo library supports all features of the Kling AI Image-to-Video API:
+The KlingDemo library supports all features of the Kling AI APIs:
 
+### Image-to-Video Features
 - **Basic Image-to-Video**: Generate videos from a single image
 - **Dynamic Masks**: Control motion in specific areas of the image
 - **Static Masks**: Keep specific areas of the image static
 - **Camera Control**: Set up camera movements like pan, tilt, zoom
 - **Image Tail**: Control both the start and end frames of the video
+
+### Image Generation Features
+- **Text-to-Image**: Generate images from text prompts
+- **Image-to-Image**: Generate images using a reference image
+- **Multiple Models**: Support for all Kling AI image models (kling-v1, kling-v1-5, kling-v2)
+- **Negative Prompts**: Specify what to avoid in the generated image
+- **Multiple Outputs**: Generate multiple variations in a single request
+- **Aspect Ratio Control**: Control the dimensions of the generated image
+- **Reference Types**: Use reference images for subject features or face similarity
+- **Fidelity Control**: Adjust how closely the generated image follows the reference
 
 ## Project Structure
 
@@ -162,13 +266,15 @@ klingdemo/
 ├── api/              # API client implementation
 │   └── client.py     # Main API client with JWT authentication
 ├── models/           # Pydantic models
-│   └── image2video.py # Data models
+│   ├── image2video.py # Image-to-Video data models
+│   └── image_generation.py # Image Generation data models
 ├── utils/            # Utility functions
 │   ├── config.py     # Configuration management and JWT token generation
 │   └── image.py      # Image handling utilities
 └── examples/         # Example scripts
-    ├── basic_demo.py # Basic usage example
-    └── advanced_demo.py # Advanced features example
+    ├── basic_demo.py     # Basic Image-to-Video example
+    ├── advanced_demo.py  # Advanced Image-to-Video features
+    └── image_gen_demo.py # Image generation examples
 ```
 
 ## Development
