@@ -1,6 +1,7 @@
 # klingdemo/utils/keyframe_parser.py
 
 import re
+import logging
 from typing import List, Optional, Dict, Any
 from pathlib import Path
 from pydantic import BaseModel, Field, ValidationError, field_validator # Use field_validator for Pydantic v2+
@@ -109,7 +110,7 @@ def parse_keyframe_file(file_path: Path) -> List[KeyframeData]:
                             keyframes.append(keyframe)
                         except ValidationError as e:
                             # Handle validation errors (e.g., wrong data type for 'Seed')
-                            print(f"Warning: Skipping frame ending before line {line_num} due to validation error(s):\n{e}")
+                            logging.warning(f"Skipping frame ending before line {line_num} due to validation error(s):\n{e}")
                             # Consider using logging instead of print in a real application
                             # logging.warning(...)
 
@@ -124,14 +125,14 @@ def parse_keyframe_file(file_path: Path) -> List[KeyframeData]:
                         if key: # Ensure key is not empty
                             current_frame_data[key] = value
                         else:
-                             print(f"Warning: Skipping line {line_num} with empty key: '{line}'")
+                             logging.warning(f"Skipping line {line_num} with empty key: '{line}'")
                     except ValueError:
                         # Handle lines with ':' but incorrect format (e.g., ":value" or "key:")
-                        print(f"Warning: Skipping malformed key-value line {line_num}: '{line}'")
+                        logging.warning(f"Skipping malformed key-value line {line_num}: '{line}'")
                 else:
                     # --- Unrecognized line format ---
                     # Ignore or log lines that are not frame markers, comments (if any), or K:V pairs
-                    print(f"Warning: Skipping unrecognized line format {line_num}: '{line}'")
+                    logging.warning(f"Skipping unrecognized line format {line_num}: '{line}'")
 
 
         # --- After the loop: Process the last frame ---
@@ -143,7 +144,7 @@ def parse_keyframe_file(file_path: Path) -> List[KeyframeData]:
                 keyframe = KeyframeData(**current_frame_data)
                 keyframes.append(keyframe)
             except ValidationError as e:
-                print(f"Warning: Skipping the last frame due to validation error(s):\n{e}")
+                logging.warning(f"Skipping the last frame due to validation error(s):\n{e}")
 
     except FileNotFoundError: # Should be caught earlier, but defensive check
          raise
