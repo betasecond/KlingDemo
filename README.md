@@ -175,13 +175,25 @@ The project includes example scripts that demonstrate how to use the library:
 This script demonstrates the basic functionality of creating an image-to-video task:
 
 ```bash
-python -m src.klingdemo.examples.basic_demo \
+python -m src.examples.basic_demo \
     --image path/to/image.jpg \
     --prompt "A cat dancing" \
     --model kling-v1 \
     --mode std \
-    --duration 5
+    --duration 5 \
+    --output-dir ./custom_output
 ```
+
+Key parameters:
+- `--image`: Path to input image or URL
+- `--prompt`: Text description for the generated video
+- `--model`: Model to use (e.g., kling-v1, kling-v1-5, kling-v1-6)
+- `--mode`: Generation mode, "std" (standard) or "pro" (professional quality)
+- `--duration`: Video duration in seconds (5 or 10)
+- `--negative-prompt`: Text describing content to avoid
+- `--cfg-scale`: Generation freedom factor (0.0-1.0, higher means more adherence to prompt)
+- `--output-dir`: Custom directory to save generated videos (defaults to ./output)
+- `--env-file`: Path to custom .env file for configuration
 
 ### Advanced Image-to-Video Demo
 
@@ -189,22 +201,50 @@ This script demonstrates advanced features like dynamic masks, static masks, cam
 
 ```bash
 # Example with dynamic mask
-python -m src.klingdemo.examples.advanced_demo \
+python -m src.examples.advanced_demo \
     --image path/to/image.jpg \
     --feature dynamic_mask \
     --dynamic-mask path/to/mask.png \
     --trajectories '[{"x": 100, "y": 200}, {"x": 300, "y": 400}]' \
-    --prompt "A person walking"
+    --prompt "A person walking" \
+    --output-dir ./motion_outputs
     
 # Example with camera control
-python -m src.klingdemo.examples.advanced_demo \
+python -m src.examples.advanced_demo \
     --image path/to/image.jpg \
     --feature camera_control \
     --camera-type simple \
     --camera-param zoom \
     --camera-value 5.0 \
-    --prompt "Zooming into a landscape"
+    --prompt "Zooming into a landscape" \
+    --output-dir ./camera_outputs
+    
+# Example with image tail (start and end frames)
+python -m src.examples.advanced_demo \
+    --image path/to/start_image.jpg \
+    --feature image_tail \
+    --image-tail path/to/end_image.jpg \
+    --prompt "Morphing from day to night" \
+    --output-dir ./morph_outputs
+    
+# Example with static mask (keeping areas still)
+python -m src.examples.advanced_demo \
+    --image path/to/image.jpg \
+    --feature static_mask \
+    --static-mask path/to/mask.png \
+    --prompt "Moving background with static foreground" \
+    --output-dir ./static_outputs
 ```
+
+Key parameters (in addition to basic demo parameters):
+- `--feature`: The advanced feature to use (dynamic_mask, static_mask, camera_control, image_tail)
+- `--dynamic-mask`: Path to dynamic mask image when using dynamic_mask feature
+- `--trajectories`: JSON array of coordinate points for motion path when using dynamic_mask
+- `--static-mask`: Path to static mask image when using static_mask feature
+- `--camera-type`: Camera movement type (simple, down_back, etc.) when using camera_control
+- `--camera-param`: Camera parameter to adjust (zoom, pan, tilt, etc.) when using simple camera_control
+- `--camera-value`: Value for camera parameter (-10.0 to 10.0) when using simple camera_control
+- `--image-tail`: Path to ending image when using image_tail feature
 
 ### Image Generation Demo
 
@@ -212,31 +252,122 @@ This script demonstrates how to use the image generation capabilities (both text
 
 ```bash
 # Text-to-Image example
-python -m src.klingdemo.examples.image_gen_demo \
+python -m src.examples.image_gen_demo \
     --prompt "A beautiful sunset over mountains" \
     --model kling-v1-5 \
     --aspect-ratio 16:9 \
-    --n 2
+    --n 2 \
+    --output-dir ./sunset_images
 
 # Image-to-Image example with subject reference
-python -m src.klingdemo.examples.image_gen_demo \
+python -m src.examples.image_gen_demo \
     --prompt "A cyberpunk version of the person" \
     --model kling-v1-5 \
     --image path/to/reference_image.jpg \
     --image-reference subject \
-    --image-fidelity 0.7
+    --image-fidelity 0.7 \
+    --output-dir ./cyberpunk_outputs
 
 # Image-to-Image example with face reference
-python -m src.klingdemo.examples.image_gen_demo \
+python -m src.examples.image_gen_demo \
     --prompt "A portrait of the person as a medieval knight" \
     --model kling-v1-5 \
     --image path/to/face_image.jpg \
     --image-reference face \
     --image-fidelity 0.6 \
-    --human-fidelity 0.8
+    --human-fidelity 0.8 \
+    --output-dir ./knight_portraits \
+    --negative-prompt "modern clothing, glasses"
 ```
 
-Run `python -m src.klingdemo.examples.image_gen_demo --help` for full usage instructions.
+Key parameters:
+- `--prompt`: Text description of desired image
+- `--model`: Model name (kling-v1, kling-v1-5, kling-v2)
+- `--negative-prompt`: Text describing content to avoid (only for text-to-image)
+- `--image`: Path to reference image (for image-to-image generation)
+- `--image-reference`: How to use the reference image: "face" (human face reference) or "subject" (general subject features)
+- `--image-fidelity`: How closely to follow the reference image (0.0-1.0)
+- `--human-fidelity`: How closely to follow facial features when using face reference (0.0-1.0)
+- `--n`: Number of images to generate (1-9)
+- `--aspect-ratio`: Output image dimensions (16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3, 21:9)
+- `--seed`: Set specific seed for reproducible results
+- `--output-dir`: Custom directory to save generated images
+
+### Keyframe Generation Demo
+
+This script enables generating multiple images based on keyframe descriptions with optional reference image support:
+
+```bash
+# Text-to-Image keyframe generation
+python -m src.examples.keyframe_to_image.run_keyframe_generation \
+    --keyframes-file path/to/keyframes.txt \
+    --output-dir ./story_keyframes \
+    --model kling-v1-5 \
+    --log-level DEBUG
+
+# Image-to-Image keyframe generation with face reference
+python -m src.examples.keyframe_to_image.run_keyframe_generation \
+    --keyframes-file path/to/character_keyframes.txt \
+    --reference-image path/to/face.jpg \
+    --image-reference FACE \
+    --image-fidelity 0.7 \
+    --human-fidelity 0.8 \
+    --output-dir ./character_scenes \
+    --model kling-v1-5
+
+# Image-to-Image keyframe generation with subject reference
+python -m src.examples.keyframe_to_image.run_keyframe_generation \
+    --keyframes-file path/to/object_keyframes.txt \
+    --reference-image path/to/subject.jpg \
+    --image-reference SUBJECT \
+    --image-fidelity 0.6 \
+    --output-dir ./object_variations
+```
+
+Keyframes file format:
+```
+[Frame 1]
+Prompt: A futuristic cityscape at dawn
+NegativePrompt: blurry, low quality
+AspectRatio: 16:9
+Seed: 12345
+
+[Frame 2]
+Prompt: A close-up of a cybernetic eye
+Steps: 30
+AspectRatio: 1:1
+```
+
+Key parameters:
+- `--keyframes-file`: Path to text file containing keyframe descriptions (default: Input/keyframes.txt)
+- `--reference-image`: Optional path to a reference image for image-to-image generation
+- `--output-dir`: Directory to save generated keyframe images (default: output_keyframes)
+- `--model`: Model name to use (default: kling-v1-5)
+- `--image-reference`: Type of reference: "FACE" or "SUBJECT" (default: FACE)
+- `--image-fidelity`: Image reference strength (0.0-1.0, default: 0.5)
+- `--human-fidelity`: Face reference strength when using FACE reference (0.0-1.0, default: 0.8)
+- `--env-file`: Path to specific .env configuration file
+- `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+
+The keyframes file supports various parameters per frame including Prompt, NegativePrompt, AspectRatio, Seed, and any other custom parameters you wish to include.
+
+Run any example script with `--help` for full usage instructions.
+
+## External Integration Demo
+
+Additionally, there's a demo showing how to integrate with external services like Dify:
+
+```bash
+python -m src.examples.external_dify_demo \
+    --image path/to/image.jpg \
+    --env-file ./custom_env_file.env \
+    --output-dir ./dify_outputs
+```
+
+Key parameters:
+- `--image`: Path to input image or URL
+- `--env-file`: Path to custom environment file with Dify API keys
+- `--output-dir`: Directory to save generated outputs
 
 ## API Features
 
